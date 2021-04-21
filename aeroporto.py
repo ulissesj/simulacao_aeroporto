@@ -29,7 +29,12 @@ class Aeroporto(object):
     
     #Processo de embarcar/desembarcar passageiros
     def desembarcar(self,aviao):
-        yield self.env.timeout(DESEMBARQUE)
+        n = random.randint(0,1)
+        if(n==1):
+            print("%s abastecendo..." %(aviao))
+            yield self.env.timeout(DESEMBARQUE+ABASTECIMENTO)
+        else:
+            yield self.env.timeout(DESEMBARQUE)
 
     #Processo de abastecer a aeronave
     def abastecer(self,aviao):
@@ -37,13 +42,13 @@ class Aeroporto(object):
 
 #Cada avião tem um 'nome' e chega no aeroporto requerindo uma pista e um finger
 def aviao(env,name,aer):
-    print('%s pousou na pista em %.2f.' % (name, env.now))
+    print('%s está preparando para pousar em %.2f.' % (name, env.now))
     
     #Entra na fila da pista para pousar
     with aer.pista.request() as request:
         yield request
 
-        print('%s está taxiando em %.2f.' % (name, env.now))
+        print('%s pousou e está taxiando em %.2f.' % (name, env.now))
         yield env.process(aer.taxiar(name))
     
     #Entra na fila do finger
@@ -54,11 +59,11 @@ def aviao(env,name,aer):
         yield env.process(aer.desembarcar(name))
     
     #Entra na fila de abastecimento
-    with aer.caminhoes.request() as request:
+    """with aer.caminhoes.request() as request:
         yield request
 
         print('%s está abastecendo em %.2f.' % (name, env.now))
-        yield env.process(aer.abastecer(name))
+        yield env.process(aer.abastecer(name))"""
     
     #Entra na fila da pista para decolar
     with aer.pista.request() as request:
