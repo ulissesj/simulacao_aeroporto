@@ -9,7 +9,7 @@ NUM_FINGERS = 2        # NUMERO DE FINGERS
 TAXIAMENTO = 1         # TEMPO DE DESOCUPAÇÃO DA PISTA
 DESEMBARQUE = [8,16]   # TEMPO MIN DE DESEMBARQUE
 ABASTECIMENTO = [1,5]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
-T_INTER = 10           # CRIA UM AVIÃO A CADA 10 MINUTOS
+T_INTER = 5           # CRIA UM AVIÃO A CADA 10 MINUTOS
 SIM_TIME = 60          # TEMPO DE SIMULAÇÃO EM MINUTOS
 
 class Aeroporto(object):
@@ -42,13 +42,14 @@ def aviao(env,name,aer):
         yield request
 
         print('%s pousou e está taxiando em %.2f.' % (name, env.now))
+        t_taxiar = env.now + TAXIAMENTO
         yield env.process(aer.taxiar(name))
     
     #Entra na fila do finger
     with aer.finger.request() as request:
         yield request
 
-        print('%s está desembarcando em %.2f.' % (name, env.now))
+        print('%s está desembarcando em %.2f Espera %.2f.' % (name, env.now, env.now-t_taxiar))
         yield env.process(aer.desembarcar(name))
     
     
