@@ -4,35 +4,33 @@ import simpy
 
 
 RANDOM_SEED = 42    
-NUM_PISTAS = 1    # NUMERO DE PISTAS 
-NUM_FINGERS = 2   # NUMERO DE FINGERS
-TAXIAMENTO = 1    # TEMPO DE DESOCUPAÇÃO DA PISTA
-DESEMBARQUE = 8   # TEMPO MIN DE DESEMBARQUE
-ABASTECIMENTO = 5 # TEMPO DE ABASTECIMENTO(OPCIONAL)
-T_INTER = 10      # CRIA UM AVIÃO A CADA 10 MINUTOS
-SIM_TIME = 60     # TEMPO DE SIMULAÇÃO EM MINUTOS
+NUM_PISTAS = 1         # NUMERO DE PISTAS 
+NUM_FINGERS = 2        # NUMERO DE FINGERS
+TAXIAMENTO = 1         # TEMPO DE DESOCUPAÇÃO DA PISTA
+DESEMBARQUE = [8,16]   # TEMPO MIN DE DESEMBARQUE
+ABASTECIMENTO = [1,5]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
+T_INTER = 10           # CRIA UM AVIÃO A CADA 10 MINUTOS
+SIM_TIME = 60          # TEMPO DE SIMULAÇÃO EM MINUTOS
 
 class Aeroporto(object):
-    def __init__(self, env, num_pistas,num_fingers,desembarque,taxiamento,abastecimento):
+    def __init__(self, env, num_pistas,num_fingers,taxiamento,):
         self.env = env
         self.finger = simpy.Resource(env,num_fingers)
         self.pista = simpy.Resource(env, num_pistas)
-        self.desembarque = desembarque
         self.taxiamento = taxiamento
-        self.abastecimento = abastecimento
     
     #Processo de taxiar a aeronave, no pouso e na decolagem
     def taxiar(self,aviao):
         yield self.env.timeout(TAXIAMENTO)
     
-    #Processo de embarcar/desembarcar passageiros
+    #Processo de embarcar/desembarcar passageiros + abastecer(opcional)
     def desembarcar(self,aviao):
-        t_desembarque = random.randint(8,16)
+        t_desembarque = random.randint(*DESEMBARQUE)
         t_abastecimento = 0
         n = random.randint(0,1) #Se for abastecer ou não(0 ou 1)
         if(n==1): #Se abastecer
             print("%s abastecendo" %aviao)
-            t_abastecimento = random.randint(1,5)
+            t_abastecimento = random.randint(*ABASTECIMENTO)
         yield self.env.timeout(t_desembarque+t_abastecimento)
 
 #Cada avião tem um 'nome' e chega no aeroporto requerindo uma pista e um finger
@@ -62,11 +60,11 @@ def aviao(env,name,aer):
         yield env.process(aer.taxiar(name))
 
 #Setup do ambiente, cria um aeroporto, aviões iniciais e mais aviões como decorrer do tempo
-def setup(env, num_pistas,num_fingers,t_taxiamento, t_desembarque, t_abastecimento, t_inter):
-    aeroporto = Aeroporto(env, num_pistas,num_fingers,t_desembarque,t_taxiamento,t_abastecimento)
+def setup(env, num_pistas,num_fingers,t_taxiamento,t_inter):
+    aeroporto = Aeroporto(env, num_pistas,num_fingers,t_taxiamento)
 
     #Cria os dois primeiros aviões
-    for i in range(1):
+    for i in range(2):
         env.process(aviao(env, 'Avião %d' % i, aeroporto))
     
     #Cria os aviões enquanto a simulação roda
@@ -80,7 +78,7 @@ random.seed(RANDOM_SEED) #Ajuda a reproduzir os resultados
 
 #Cria um ambiente e começa o processo de setup
 env = simpy.Environment()
-env.process(setup(env, NUM_PISTAS, NUM_FINGERS, TAXIAMENTO, DESEMBARQUE,ABASTECIMENTO,T_INTER))
+env.process(setup(env, NUM_PISTAS, NUM_FINGERS, TAXIAMENTO,T_INTER))
 
 #Executa até o tempo total de simulação
 env.run(until=SIM_TIME)
