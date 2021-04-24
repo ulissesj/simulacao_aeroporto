@@ -4,37 +4,64 @@ import simpy
 
 
 RANDOM_SEED = 42    
-NUM_PISTAS = 1         # NUMERO DE PISTAS 
-NUM_FINGERS = 2        # NUMERO DE FINGERS
-TAXIAMENTO = 1         # TEMPO DE DESOCUPAÇÃO DA PISTA
-DESEMBARQUE = [8,16]   # TEMPO MIN DE DESEMBARQUE
-ABASTECIMENTO = [1,5]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
-T_INTER = 5           # CRIA UM AVIÃO A CADA 10 MINUTOS
-SIM_TIME = 60          # TEMPO DE SIMULAÇÃO EM MINUTOS
+NUM_PISTAS = 1    # NUMERO DE PISTAS 
+NUM_FINGERS = 2   # NUMERO DE FINGERS
+TAXIAMENTO = 1    # TEMPO DE DESOCUPAÇÃO DA PISTA
+DESEMBARQUE = 8   # TEMPO DE DESEMBARQUE
+CAMINHOES = 2     # CAMINHÕES DE ABASTECIMENTO
+ABASTECIMENTO = 5 # TEMPO DE ABASTECIMENTO(OPCIONAL)
+T_INTER = 2      # CRIA UM AVIÃO A CADA T_INTER MINUTOS
+SIM_TIME = 5000     # TEMPO DE SIMULAÇÃO EM MINUTOS
+
+class Stats():
+    """ Mantem as principais estatisticas da simulacao em curso
+	"""
+    def __init__(self):
+        self.num_arrivals = 0
+        self.num_complet = 0
+		
+    def new_arrival(self):
+        self.num_arrivals+=1
+			
+    def new_completion(self):
+        self.num_complet+=1
+		
+    def report(self):
+        print ('\n*** SimPy Relatório de Simulação ***\n')
+        print ('Tempo Total de Simulação: %.4f' % SIM_TIME)
+        print ('Chegadas Totais: %d' % self.num_arrivals)
+        print ('Decolagens Totais: %d' % self.num_complet)
 
 class Aeroporto(object):
-    def __init__(self, env, num_pistas,num_fingers,taxiamento,):
+    def __init__(self, env, num_pistas,num_fingers,desembarque,taxiamento,abastecimento, n_caminhoes):
         self.env = env
         self.finger = simpy.Resource(env,num_fingers)
         self.pista = simpy.Resource(env, num_pistas)
+        self.caminhoes = simpy.Resource(env, n_caminhoes)
+        self.desembarque = desembarque
         self.taxiamento = taxiamento
+        self.abastecimento = abastecimento
     
     #Processo de taxiar a aeronave, no pouso e na decolagem
     def taxiar(self,aviao):
         yield self.env.timeout(TAXIAMENTO)
     
-    #Processo de embarcar/desembarcar passageiros + abastecer(opcional)
+    #Processo de embarcar/desembarcar passageiros
     def desembarcar(self,aviao):
-        t_desembarque = random.randint(*DESEMBARQUE)
-        t_abastecimento = 0
-        n = random.randint(0,1) #Se for abastecer ou não(0 ou 1)
-        if(n==1): #Se abastecer
-            print("%s abastecendo" %aviao)
-            t_abastecimento = random.randint(*ABASTECIMENTO)
-        yield self.env.timeout(t_desembarque+t_abastecimento)
+        n = random.randint(0,1)
+        if(n==1):
+            print("%s abastecendo..." %(aviao))
+            yield self.env.timeout(DESEMBARQUE+ABASTECIMENTO)
+        else:
+            yield self.env.timeout(DESEMBARQUE)
+
+    #Processo de abastecer a aeronave
+    def abastecer(self,aviao):
+        yield self.env.timeout(ABASTECIMENTO)
 
 #Cada avião tem um 'nome' e chega no aeroporto requerindo uma pista e um finger
 def aviao(env,name,aer):
+    stat.new_arrival()
     print('%s está preparando para pousar em %.2f.' % (name, env.now))
     
     #Entra na fila da pista para pousar
@@ -42,16 +69,21 @@ def aviao(env,name,aer):
         yield request
 
         print('%s pousou e está taxiando em %.2f.' % (name, env.now))
-        t_taxiar = env.now + TAXIAMENTO
         yield env.process(aer.taxiar(name))
     
     #Entra na fila do finger
     with aer.finger.request() as request:
         yield request
 
-        print('%s está desembarcando em %.2f Espera %.2f.' % (name, env.now, env.now-t_taxiar))
+        print('%s está desembarcando em %.2f.' % (name, env.now))
         yield env.process(aer.desembarcar(name))
     
+    #Entra na fila de abastecimento
+    with aer.caminhoes.request() as request:
+        yield request
+
+        print('%s está abastecendo em %.2f.' % (name, env.now))
+        yield env.process(aer.abastecer(name))
     
     #Entra na fila da pista para decolar
     with aer.pista.request() as request:
@@ -59,10 +91,11 @@ def aviao(env,name,aer):
 
         print('%s está decolando em %.2f.' % (name, env.now))
         yield env.process(aer.taxiar(name))
+        stat.new_completion()
 
 #Setup do ambiente, cria um aeroporto, aviões iniciais e mais aviões como decorrer do tempo
-def setup(env, num_pistas,num_fingers,t_taxiamento,t_inter):
-    aeroporto = Aeroporto(env, num_pistas,num_fingers,t_taxiamento)
+def setup(env, num_pistas,num_fingers,t_taxiamento, t_desembarque, t_abastecimento, n_caminhoes, t_inter):
+    aeroporto = Aeroporto(env, num_pistas,num_fingers,t_desembarque,t_taxiamento,t_abastecimento,n_caminhoes)
 
     #Cria os dois primeiros aviões
     for i in range(2):
@@ -74,12 +107,22 @@ def setup(env, num_pistas,num_fingers,t_taxiamento,t_inter):
         i+=1
         env.process(aviao(env, 'Avião %d' %i, aeroporto))
 
+
 print("Simuando aeroporto....")
 random.seed(RANDOM_SEED) #Ajuda a reproduzir os resultados
 
+# Create statistics object
+stat = Stats()
+
 #Cria um ambiente e começa o processo de setup
 env = simpy.Environment()
-env.process(setup(env, NUM_PISTAS, NUM_FINGERS, TAXIAMENTO,T_INTER))
+env.process(setup(env, NUM_PISTAS, NUM_FINGERS, TAXIAMENTO, DESEMBARQUE,ABASTECIMENTO,CAMINHOES,T_INTER))
 
-#Executa até o tempo total de simulação
+#Executa
 env.run(until=SIM_TIME)
+
+stat.report()
+print ('Taxa de Chegadas: %.2f aviões por hora' % (stat.num_arrivals/(env.now/60)))
+print ('Taxa de Decolagens (Throughput): %.2f aviões por hora' % (stat.num_complet/(env.now/60)))
+print ('Tempo Médio de Serviço: %.2f minutos' % (env.now/stat.num_complet))
+print ('--> %.2f%% dos aviões atendidos' % ((stat.num_complet*100)/stat.num_arrivals))
