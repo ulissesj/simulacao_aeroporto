@@ -9,8 +9,9 @@ NUM_FINGERS = 2        # NUMERO DE FINGERS
 TAXIAMENTO = 1         # TEMPO DE DESOCUPAÇÃO DA PISTA
 DESEMBARQUE = [8,16]   # TEMPO MIN DE DESEMBARQUE
 ABASTECIMENTO = [1,5]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
-T_INTER = 10           # CRIA UM AVIÃO A CADA 10 MINUTOS
-SIM_TIME = 60          # TEMPO DE SIMULAÇÃO EM MINUTOS
+T_INTER = 5           # CRIA UM AVIÃO A CADA 10 MINUTOS
+SIM_TIME = 60         # TEMPO DE SIMULAÇÃO EM 
+TOTAL_ESPERA = []
 
 class Stats():
     """ Mantem as principais estatisticas da simulacao em curso
@@ -68,10 +69,10 @@ def aviao(env,name,aer):
     #Entra na fila do finger
     with aer.finger.request() as request:
         yield request
-
-        print('%s está desembarcando em %.2f Espera %.2f.' % (name, env.now, env.now-t_taxiar))
+        espera = env.now-t_taxiar
+        TOTAL_ESPERA.append(espera)
+        print('%s está desembarcando em %.2f Espera %.2f.' % (name, env.now, espera))
         yield env.process(aer.desembarcar(name))
-    
     
     #Entra na fila da pista para decolar
     with aer.pista.request() as request:
@@ -112,4 +113,5 @@ stat.report()
 print ('Taxa de Chegadas: %.2f aviões por hora' % (stat.num_arrivals/(env.now/60)))
 print ('Taxa de Decolagens (Throughput): %.2f aviões por hora' % (stat.num_complet/(env.now/60)))
 print ('Tempo Médio de Serviço: %.2f minutos' % (env.now/stat.num_complet))
+print ('Tempo Médio de espera: %.2f minutos' % (sum(TOTAL_ESPERA)/stat.num_arrivals))
 print ('--> %.2f%% dos aviões atendidos' % ((stat.num_complet*100)/stat.num_arrivals))
