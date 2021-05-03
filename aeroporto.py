@@ -1,16 +1,26 @@
 import random
-
+import math
 import simpy
 
+ITERACOES = 5
 
 RANDOM_SEED = 42    
-NUM_PISTAS = 1         # NUMERO DE PISTAS 
-NUM_FINGERS = 2        # NUMERO DE FINGERS
+NUM_PISTAS = 3         # NUMERO DE PISTAS 
+NUM_FINGERS = 9        # NUMERO DE FINGERS
 TAXIAMENTO = 1         # TEMPO DE DESOCUPAÇÃO DA PISTA
 DESEMBARQUE = [8,16]   # TEMPO MIN DE DESEMBARQUE
-ABASTECIMENTO = [1,5]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
-T_INTER = 10            # CRIA UM AVIÃO A CADA 10 MINUTOS
+ABASTECIMENTO = [3,15]  # TEMPO MIN DE ABASTECIMENTO(OPCIONAL)
+T_INTER = 2            # CRIA UM AVIÃO A CADA T_INTER MINUTOS
 SIM_TIME = 60          # TEMPO DE SIMULAÇÃO EM 
+
+MEDIA_NUM_ARRIVALS = []
+MEDIA_NUM_COMPLET = []
+MEDIA_TAXA_CHEGADAS = []
+MEDIA_TAXA_DECOL = []
+MEDIA_TEMPO_SERVICO = []
+MEDIA_ESPERA = []
+MEDIA_PORCENTAGEM_ATENDIDOS = []
+MEDIA_AVIOES_NA_FILA = []
 
 class Stats():
     """ Mantem as principais estatisticas da simulacao em curso
@@ -63,6 +73,7 @@ def aviao(env,name,aer):
     with aer.pista.request() as request:
         yield request
 
+        AVIOES_NA_FILA.append(1)
         #print('%s pousou e está taxiando em %.2f.' % (name, env.now))
         t_taxiar = env.now + TAXIAMENTO
         yield env.process(aer.taxiar(name))
@@ -81,6 +92,8 @@ def aviao(env,name,aer):
 
         #print('%s está decolando em %.2f.' % (name, env.now))
         yield env.process(aer.taxiar(name))
+        AVIOES_NA_FILA.pop()
+        stat.new_completion()
 
 #Setup do ambiente, cria um aeroporto, aviões iniciais e mais aviões como decorrer do tempo
 def setup(env, num_pistas,num_fingers,t_taxiamento,t_inter):
@@ -95,11 +108,21 @@ def setup(env, num_pistas,num_fingers,t_taxiamento,t_inter):
         yield env.timeout(random.randint(t_inter - 2, t_inter + 2))
         i+=1
         env.process(aviao(env, 'Avião %d' %i, aeroporto))
-        stat.new_completion()
 
-for i in range(5):
-    print("Simuando aeroporto....")
+#Calcular desvio padrão
+def desvio_padrao(vet_valores):    
+    ni = 0
+    media = sum(vet_valores)/ITERACOES 
+    for x in range(len(vet_valores)):
+        ni += pow(media - vet_valores[x],2) #soma o quadrado da diferença entre a media e o valor
+    dp = math.sqrt(ni/len(vet_valores)) #tira a raiz do resultado da soma sobre o numero de valores
+    return dp
+
+
+for i in range(ITERACOES):
+    #print("Simulando aeroporto....")
     TOTAL_ESPERA = []
+    AVIOES_NA_FILA = []
     random.seed(RANDOM_SEED+i+7) #Ajuda a reproduzir os resultados
 
     stat = Stats() #Cria o objeto de status
@@ -112,9 +135,53 @@ for i in range(5):
     env.run(until=SIM_TIME)
 
     #Status
-    stat.report()
-    print ('Taxa de Chegadas: %.2f aviões por hora' % (stat.num_arrivals/(env.now/60)))
-    print ('Taxa de Decolagens (Throughput): %.2f aviões por hora' % (stat.num_complet/(env.now/60)))
-    print ('Tempo Médio de Serviço: %.2f minutos' % (env.now/stat.num_complet))
-    print ('Tempo Médio de espera: %.2f minutos' % (sum(TOTAL_ESPERA)/stat.num_arrivals))
-    print ('--> %.2f%% dos aviões atendidos' % ((stat.num_complet*100)/stat.num_arrivals))
+
+    MEDIA_NUM_ARRIVALS.append(stat.num_arrivals)
+    MEDIA_NUM_COMPLET.append(stat.num_complet)
+    MEDIA_TAXA_CHEGADAS.append(stat.num_arrivals/(env.now/60))
+    MEDIA_TAXA_DECOL.append(stat.num_complet/(env.now/60))
+    MEDIA_TEMPO_SERVICO.append(env.now/stat.num_complet)
+    MEDIA_ESPERA.append(sum(TOTAL_ESPERA)/stat.num_arrivals)
+    MEDIA_PORCENTAGEM_ATENDIDOS.append((stat.num_complet*100)/stat.num_arrivals)
+    MEDIA_AVIOES_NA_FILA.append(len(AVIOES_NA_FILA))
+
+print("Simulando aeroporto....")
+print ('\n*** SimPy Relatório de Simulação ***')
+print ('\n*** VALORES MÉDIOS PARA %d ITERACOES ***\n' % ITERACOES)
+print ('Tempo Total de Simulação: %.2f' % SIM_TIME)
+print ('Chegadas Totais: %d' % (sum(MEDIA_NUM_ARRIVALS)/ITERACOES))
+print ('Decolagens Totais: %d' % (sum(MEDIA_NUM_COMPLET)/ITERACOES))
+print ('Taxa de Chegadas: %.2f aviões por hora' % (sum(MEDIA_TAXA_CHEGADAS)/ITERACOES))
+print ('Taxa de Decolagens (Throughput): %.2f aviões por hora' % (sum(MEDIA_TAXA_DECOL)/ITERACOES))
+print ('Tempo Médio de Serviço: %.2f minutos' % (sum(MEDIA_TEMPO_SERVICO)/ITERACOES))
+print ('Tempo Médio de espera: %.2f minutos' % (sum(MEDIA_ESPERA)/ITERACOES))
+print ('-->%.2f%% dos aviões atendidos' % (sum(MEDIA_PORCENTAGEM_ATENDIDOS)/ITERACOES))
+print ('-->%d aviões na fila' % (sum(MEDIA_AVIOES_NA_FILA)/ITERACOES))
+
+#Stats espera
+dp_espera = desvio_padrao(MEDIA_ESPERA)
+inferior_espera = sum(MEDIA_ESPERA)/ITERACOES - 2.776*(dp_espera/math.sqrt(ITERACOES))
+superior_espera = sum(MEDIA_ESPERA)/ITERACOES + 2.776*(dp_espera/math.sqrt(ITERACOES))
+print ('\nDesvio padrão de espera: %.2f minutos' %dp_espera )
+print("Intervalo de confiança 95% entre", inferior_espera, " e ", superior_espera)
+
+#Stats serviço
+dp_servico = desvio_padrao(MEDIA_TEMPO_SERVICO)
+inferior_servico = sum(MEDIA_TEMPO_SERVICO)/ITERACOES - 2.776*(dp_servico/math.sqrt(ITERACOES))
+superior_servico = sum(MEDIA_TEMPO_SERVICO)/ITERACOES + 2.776*(dp_servico/math.sqrt(ITERACOES))
+print ('\nDesvio padrão de serviço: %.2f minutos' %dp_servico )
+print("Intervalo de confiança 95% entre", inferior_servico, " e ", superior_servico)
+
+#Stats decolagens
+dp_decolagens = desvio_padrao(MEDIA_TAXA_DECOL)
+inferior_decolagens = sum(MEDIA_TAXA_DECOL)/ITERACOES - 2.776*(dp_decolagens/math.sqrt(ITERACOES))
+superior_decolagens = sum(MEDIA_TAXA_DECOL)/ITERACOES + 2.776*(dp_decolagens/math.sqrt(ITERACOES))
+print ('\nDesvio padrão de decolagens: %.2f' %dp_decolagens )
+print("Intervalo de confiança 95% entre", inferior_decolagens, " e ", superior_decolagens)
+
+#Stats aviões atendidos
+dp_avioes_atendidos = desvio_padrao(MEDIA_PORCENTAGEM_ATENDIDOS)
+inferior_avat = sum(MEDIA_PORCENTAGEM_ATENDIDOS)/ITERACOES - 2.776*(dp_avioes_atendidos/math.sqrt(ITERACOES))
+superior_avat = sum(MEDIA_PORCENTAGEM_ATENDIDOS)/ITERACOES + 2.776*(dp_avioes_atendidos/math.sqrt(ITERACOES))
+print ('\nDesvio padrão de %% aviões atendidos: %.2f' %dp_avioes_atendidos )
+print("Intervalo de confiança 95% entre", inferior_avat, " e ", superior_avat)
